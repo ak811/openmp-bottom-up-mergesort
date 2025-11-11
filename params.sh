@@ -1,20 +1,18 @@
 #!/bin/bash
 
+# common
+THREADS="1 4 16 64"
 
-# common  
-THREADS="1 2 4 8 12 16"
-
-# reduce  
+# reduce
 REDUCE_NS="10000 1000000 100000000"
 
-# numint 
+# numint
 NUMINT_NS="1000 100000 10000000"
 INTENSITIES="1 10 100 1000"
 GRANS="1 10 100 1000"
 
-# prefixsum 
+# prefixsum
 PREFIXSUM_NS="10000 1000000 100000000 1000000000"
 
-# mergesort 
+# mergesort
 MERGESORT_NS="10000 1000000 100000000 1000000000"
-
