@@ -1,0 +1,13 @@
+
+*.sh.*
+*.o
+
+reduce/reduce
+numint/numint
+prefixsum/prefixsum
+mergesort/mergesort
+
+sequential/reduce_seq
+sequential/numint_seq
+prefixsum/prefixsum_seq
+mergesort/mergesort_seq

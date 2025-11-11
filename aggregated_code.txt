@@ -1,0 +1,914 @@
+PROJECT FILE TREE
+================================================================================
+mergesort_with_loops/
+    params.sh
+    functions.c
+    gen_lib.c
+    approx.cpp
+    sequential_lib.c
+    gen_lib.o
+    Makefile
+    libgen.a
+    sequential/
+        mergesort_seq.o
+        bench_sequential.sh
+        mergesort_seq.cpp
+        Makefile
+        mergesort_seq
+        queue.sh
+    mergesort/
+        plot.sh
+        mergesort.cpp
+        bench_mergesort.sh
+        omploop.hpp
+        test.sh
+        Makefile
+        queue.sh
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/params.sh
+================================================================================
+#!/bin/bash
+
+
+# common  
+THREADS="1 2 4 8 12 16"
+
+# reduce  
+REDUCE_NS="10000 1000000 100000000"
+
+# numint 
+NUMINT_NS="1000 100000 10000000"
+INTENSITIES="1 10 100 1000"
+GRANS="1 10 100 1000"
+
+# prefixsum 
+PREFIXSUM_NS="10000 1000000 100000000 1000000000"
+
+# mergesort 
+MERGESORT_NS="10000 1000000 100000000 1000000000"
+
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/functions.c
+================================================================================
+#include <math.h>
+
+float f1(float x, int intensity) {
+  int sign = x > 0;
+  
+  for (int i=0; i< intensity; ++i) {
+    x = x*x;
+    x = sqrt(x);
+  }
+  return (sign?1:-1)*x;
+}
+
+float f2(float x, int intensity) {
+  float realx = f1(x, intensity);
+  return realx*realx;
+}
+
+float f3(float x, int intensity) {
+  return sin(f1(x,intensity));
+}
+
+float f4(float x, int intensity) {
+  return exp(cos(f1(x,intensity)));
+}
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/gen_lib.c
+================================================================================
+#include <stdlib.h>
+#include <stdio.h>
+
+void generateReduceData (int* arr, size_t n) {
+  for (size_t i=0; i<n; ++i) {
+    if (i%2 ==0 )
+      arr[i] = i/2;
+    else
+      arr[i] = -(i/2);
+  }
+}
+
+void generateMergeSortData (int* arr, size_t n) {
+  for (size_t i=0; i<n; ++i) {
+    arr[i] = i;
+  }
+
+  for (int i = n-1; i>0; --i) {
+    int swapwith = rand()%i;
+    int temp = arr[i];
+    arr[i] = arr[swapwith];
+    arr[swapwith] = temp;
+  }  
+}
+
+void generatePrefixSumData (int* arr, int n) {
+  for (int i=0; i<n; ++i) {
+    if (i%2 == 0 )
+      arr[i] = i/2;
+    else
+      arr[i] = -(i/2);
+  }
+}
+
+
+void checkPrefixSumResult (const int* arr, size_t n) {
+  int correct = 1;
+
+  int *data = malloc(sizeof(int)*n);
+  generatePrefixSumData (data, n);
+
+  correct = correct && (arr[0] == 0);
+
+  int sum = 0;
+  for (int i=0; i<n; ++i) {
+    sum += data[i];
+    if (arr[i+1] != sum) {
+      correct = 0;
+    }
+  }
+  
+  if (correct) {  
+    printf ("checked\n");
+  }
+  else {
+    printf ("incorrect\n");
+  }
+  free(data);
+}
+
+
+//this is based on how MS data is generated
+void checkMergeSortResult (const int* arr, size_t n) {
+  int correct = 1;
+  
+  for (int i=0; i< n-1; ++i) {
+    correct = correct && (arr[i] == i);
+  }
+
+  if (correct) {  
+    printf ("checked\n");
+  }
+  else {
+    printf ("incorrect\n");
+  }
+}
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/approx.cpp
+================================================================================
+#include <cstdlib>
+#include <cmath>
+#include <stdio.h>
+
+int main (int argc, char* argv[]) {
+  if (argc!=3)
+	  return 1;
+
+  //float a = atof(argv[1]); //atof is an unsafe function //really should use strtof and check error
+  //float b = atof(argv[2]); //atof is an unsafe function
+
+  float a, b;
+  
+  if (sscanf(argv[1], "%f", &a) != 1)
+    return 1;
+  if (sscanf(argv[2], "%f", &b) != 1)
+    return 1;
+
+  return (fabs(a-b) > .1);  
+}
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/sequential_lib.c
+================================================================================
+#include <stdlib.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+float f1(float x, int intensity);
+float f2(float x, int intensity);
+float f3(float x, int intensity);
+float f4(float x, int intensity);
+
+#ifdef __cplusplus
+}
+#endif
+
+  
+float sequential_integrate (int argc, char* argv[]) {
+  
+  int functionid = atoi(argv[1]);
+  float a = atof(argv[2]);
+  float b = atof(argv[3]);
+  int n = atoi(argv[4]);
+  int intensity = atoi(argv[5]);
+
+  float (*f) (float, int);
+  f = NULL;
+  
+  if (functionid == 1) {
+    f = f1;
+  }
+  if (functionid == 2) {
+    f = f2;
+  }
+  if (functionid == 3) {
+    f = f3;
+  }
+  if (functionid == 4) {
+    f = f4;
+  }
+
+  double sum = 0;
+  
+  for (int i=0; i<n; ++i) {
+    float x = a+(i+.5)*(b-a)/n;
+    float val = f(x, intensity);
+
+    sum += val;
+  }
+  float integrate = sum * (b-a)/n;
+
+  return integrate;
+}
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/gen_lib.o
+================================================================================
+Error reading file: 'utf-8' codec can't decode byte 0x90 in position 40: invalid start byte
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/Makefile
+================================================================================
+CFLAGS=-O3 -std=c11 -fPIC -g -Xassembler -mrelax-relocations=no
+CXXFLAGS=-O3 -std=c++17 -fPIC -g -Xassembler -mrelax-relocations=no
+LDFLAGS=-fPIE
+LD=g++
+
+all: activity-mergesort.tgz
+
+libgen.a: gen_lib.o
+	ar rcs libgen.a gen_lib.o
+
+%.pdf: %.tex
+	pdflatex $<
+
+ARXIV=Makefile approx.cpp \
+      libgen.a \
+      sequential/bench_sequential.sh sequential/Makefile sequential/mergesort_seq.cpp  sequential/queue.sh \
+      mergesort/bench_mergesort.sh mergesort/Makefile mergesort/mergesort.cpp mergesort/omploop.hpp mergesort/plot.sh mergesort/queue.sh mergesort/test.sh \
+      .gitignore params.sh \
+      activity_mergesort_loops.pdf
+
+activity-mergesort.tgz: $(ARXIV)
+	tar zcvf $@ \
+                 $(ARXIV)
+
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/libgen.a
+================================================================================
+Error reading file: 'utf-8' codec can't decode byte 0xc6 in position 75: invalid continuation byte
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/sequential/mergesort_seq.o
+================================================================================
+Error reading file: 'utf-8' codec can't decode byte 0xd8 in position 40: invalid continuation byte
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/sequential/bench_sequential.sh
+================================================================================
+#!/bin/bash
+
+RESULTDIR=result/
+h=`hostname`
+
+if [ "$h" = "gal-i1.uncc.edu"  ];
+then
+    echo Do not run this on the headnode of the cluster, use qsub!
+    exit 1
+fi
+
+# create result directory
+if [ ! -d ${RESULTDIR} ];
+then
+    mkdir ${RESULTDIR}
+fi
+
+
+# import params
+source ../params.sh
+
+
+echo starting time is $(date) 
+
+# mergesort sequential
+for n in ${MERGESORT_NS}; 
+do
+    ./mergesort_seq ${n}  >/dev/null 2> ${RESULTDIR}/mergesort_seq_${n}
+done
+
+echo ending time is $(date) 
+
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/sequential/mergesort_seq.cpp
+================================================================================
+#include <omp.h>
+#include <stdio.h>
+#include <iostream>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <algorithm>
+#include <chrono>
+
+#define DEBUG 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+  void generateMergeSortData (int* arr, size_t n);
+  void checkMergeSortResult (int* arr, size_t n);
+  
+#ifdef __cplusplus
+}
+#endif
+
+
+void merge(int * arr, int l, int mid, int r) {
+  
+#if DEBUG
+  std::cout<<l<<" "<<mid<<" "<<r<<std::endl;
+#endif
+
+  // short circuits
+  if (l == r) return;
+  if (r-l == 1) {
+    if (arr[l] > arr[r]) {
+      int temp = arr[l];
+      arr[l] = arr[r];
+      arr[r] = temp;
+    }
+    return;
+  }
+
+  int i, j, k;
+  int n = mid - l;
+  
+  // declare and init temp arrays
+  int *temp = new int[n];
+  for (i=0; i<n; ++i)
+    temp[i] = arr[l+i];
+
+  i = 0;    // temp left half
+  j = mid;  // right half
+  k = l;    // write to 
+
+  // merge
+  while (i<n && j<=r) {
+     if (temp[i] <= arr[j] ) {
+       arr[k++] = temp[i++];
+     } else {
+       arr[k++] = arr[j++];
+     }
+  }
+
+  // exhaust temp 
+  while (i<n) {
+    arr[k++] = temp[i++];
+  }
+
+  // de-allocate structs used
+  delete[] temp;
+
+}
+
+
+void mergesort(int * arr, int l, int r) {
+
+  if (l < r) {
+    int mid = (l+r)/2;
+    mergesort(arr, l, mid);
+    mergesort(arr, mid+1, r);
+    merge(arr, l, mid+1, r);
+  }
+
+}
+
+
+
+
+int main (int argc, char* argv[]) {
+
+  if (argc < 2) { std::cerr<<"Usage: "<<argv[0]<<" <n>"<<std::endl;
+    return -1;
+  }
+
+  
+  // command line parameter
+  int n;
+  n = atoi(argv[1]);
+
+  // get arr data
+  int * arr = new int [n];
+  generateMergeSortData (arr, n);
+
+#if DEBUG
+  for (int i=0; i<n; ++i) 
+    std::cout<<arr[i]<<" ";
+  std::cout<<std::endl;
+#endif
+
+  // begin timing
+  std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
+  
+  // sort
+  mergesort(arr, 0, n-1);
+
+  // end timing
+  std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::now();
+  std::chrono::duration<double> elpased_seconds = end-start;
+
+  // display time to cerr
+  std::cerr<<elpased_seconds.count()<<std::endl;
+  checkMergeSortResult (arr, n);
+
+#if DEBUG
+  for (int i=0; i<n; ++i) 
+    std::cout<<arr[i]<<" ";
+  std::cout<<std::endl;
+#endif
+
+  delete[] arr;
+
+  return 0;
+}
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/sequential/Makefile
+================================================================================
+CFLAGS=-O3 -std=c11 -fPIC -g
+CXXFLAGS=-O3 -std=c++17 -fPIC -g
+ARCHIVES=../libgen.a 
+LD=g++
+
+
+all: mergesort_seq
+
+
+mergesort_seq: mergesort_seq.o
+	$(LD) $(LDFLAGS) mergesort_seq.o $(ARCHIVES) -o mergesort_seq
+
+
+bench: mergesort_seq
+	./queue.sh
+
+clean:
+	-rm *.o
+	-rm mergesort_seq
+
+distclean:
+	-rm *.sh.*
+
+.PHONY:  mergesort_seq
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/sequential/mergesort_seq
+================================================================================
+Error reading file: 'utf-8' codec can't decode byte 0xd0 in position 24: invalid continuation byte
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/sequential/queue.sh
+================================================================================
+#!/bin/bash
+
+#running=$(qstat -u ${USER} | egrep "bench_sequential.*[R|Q]")
+#if [ -n "${running}" ] ;
+#then
+#    echo "------------------------------------"
+#    echo ${USER} has this job in the queue or running 
+#    qstat | grep ${USER}
+#    echo
+#    echo please delete this job or wait for it to complete
+#    exit 1
+#fi
+
+sbatch --partition=Centaurus --chdir=`pwd` --time=02:00:00 --ntasks=1 --cpus-per-task=1 --mem=40G --job-name=mod4mss bench_sequential.sh
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/mergesort/plot.sh
+================================================================================
+#!/bin/bash
+
+RESULTDIR=result/
+SEQ_RESULTDIR=../sequential/result/
+PLOTDIR=plots/
+h=`hostname`
+
+
+# create result directory
+if [ ! -d ${RESULTDIR} ];
+then
+    echo "must run make bench_mergesort"
+#    exit 1
+fi
+
+# create plots directory
+if [ ! -d ${PLOTDIR} ];
+then
+    mkdir ${PLOTDIR}
+fi
+
+# import params
+source ../params.sh
+
+
+# error checking
+#   file existence
+#   file populate
+for n in ${MERGESORT_NS};
+do
+    for t in ${THREADS};
+    do
+         if [ ! -e ${SEQ_RESULTDIR}/mergesort_seq_${n} ] ;
+         then
+             echo ERROR: Must run the sequential bench before plotting
+             echo Please GO TO the sequential directory
+             echo and run \'make bench\' there
+             exit 1
+         fi
+
+         if [ ! -e ${RESULTDIR}/mergesort_${n}_${t} ] ;
+         then
+             echo ERROR: ${RESULTDIR}/mergesort_${n}_${t} not found 
+             echo run \'make bench\'  and WAIT for it to complete
+             exit 1
+         fi
+
+         file_content=($(wc -w ${RESULTDIR}/mergesort_${n}_${t}))
+         if [ ${file_content[0]} == "0" ];
+         then
+             echo ERROR: ${RESULTDIR}/mergesort_${n}_${t} is empty
+             echo run \'make bench\' and WAIT for it to complete
+             exit 1
+         fi
+    done
+done
+	     
+
+# format output
+for n in ${MERGESORT_NS};
+do
+    for t in ${THREADS};
+    do
+	#output in format "thread seq par"
+	echo ${t} \
+	     $(cat ${SEQ_RESULTDIR}/mergesort_seq_${n}) \
+	     $(cat ${RESULTDIR}/mergesort_${n}_${t})
+    done   > ${RESULTDIR}/speedup_mergesort_${n}
+done
+
+for t in ${THREADS};
+do
+    for n in ${MERGESORT_NS};
+    do
+      #output in format "n seq par"
+      echo ${n} \
+           $(cat ${SEQ_RESULTDIR}/mergesort_seq_${n}) \
+           $(cat ${RESULTDIR}/mergesort_${n}_${t}) 
+    done > ${RESULTDIR}/speedup_mergesort_thread_${t}
+done
+
+
+
+
+
+# create plotting commands
+GSP="${GSP} ; set title 'merge sort'; plot  "
+color=1
+for n in ${MERGESORT_NS};
+do 
+    GSP="${GSP}  '${RESULTDIR}/speedup_mergesort_${n}' u 1:(\$2/\$3) t 'n=${n}' lc ${color} lw 3 , "
+    color=`expr $color + 1`
+done
+
+for t in ${THREADS}; 
+do 
+    GTSP="${GTSP} ; set title 'mergesort- ${t} threads'; \
+                    set key top left; \
+                    set xlabel 'N'; \
+                    set ylabel 'speedup'; \
+                    set xrange [*:*]; \
+                    set yrange [0:20]; \
+                    set logscale x 10; \
+                    set ytics 2;"
+    GTSP="${GTSP} plot '${RESULTDIR}/speedup_mergesort_thread_${t}' u 1:(\$2/\$3) t 'threads=${t}' lc 1 lw 3 ; "
+done
+
+
+
+# plot
+gnuplot <<EOF
+set terminal pdf
+set output '${PLOTDIR}mergesort_speedup_n.pdf'
+set style data linespoints
+set key top left;
+set xlabel 'threads'; 
+set ylabel 'speedup';
+set xrange [0:20];
+set yrange [0:20];
+set ytics 2;
+set xtics 2;
+
+${GSP}
+
+EOF
+
+gnuplot <<EOF
+set terminal pdf
+set output '${PLOTDIR}mergesort_speedup_thread.pdf'
+set style data linespoints
+
+${GTSP}
+
+EOF
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/mergesort/mergesort.cpp
+================================================================================
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <iostream>
+#include <unistd.h>
+#include "omploop.hpp"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+  void generateMergeSortData (int* arr, size_t n);
+  void checkMergeSortResult (int* arr, size_t n);
+#ifdef __cplusplus
+}
+#endif
+
+
+int main (int argc, char* argv[]) {
+  
+  if (argc < 3) { std::cerr<<"Usage: "<<argv[0]<<" <n> <nbthreads>"<<std::endl;
+    return -1;
+  }
+
+  int n = atoi(argv[1]);
+  
+  // get arr data
+  int * arr = new int [n];
+  generateMergeSortData (arr, n);
+
+  //insert sorting code here.
+
+
+  
+  checkMergeSortResult (arr, n);
+  
+  delete[] arr;
+
+  return 0;
+}
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/mergesort/bench_mergesort.sh
+================================================================================
+#!/bin/bash
+
+RESULTDIR=result/
+h=`hostname`
+
+if [ "$h" = "gal-i1.uncc.edu"  ];
+then
+    echo Do not run this on the headnode of the cluster, use qsub!
+    exit 1
+fi
+
+if [ ! -d ${RESULTDIR} ];
+then
+    mkdir ${RESULTDIR}
+fi
+
+
+source ../params.sh
+#NS="10000 1000000 100000000 1000000000"
+#THREADS="1 2 4 8 12 16"
+
+
+# bench
+echo starting time is $(date)
+
+for n in ${MERGESORT_NS};
+do
+    for t in ${THREADS};
+    do
+	./mergesort $n $t >/dev/null 2> ${RESULTDIR}/mergesort_${n}_${t}
+    done
+done
+	     
+echo ending time is $(date)
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/mergesort/omploop.hpp
+================================================================================
+#ifndef __OMPLOOP__
+#define __OMPLOOP__
+
+#include <functional>
+
+// That does not solve the static activity, but provide the same feature so it can be used as a replacement.
+// You need to add -fopenmp to CXXFLAGS and LDFLAGS for this to work.
+// set number of thread by called setNbThread.
+class OmpLoop {
+
+  int nbthread;
+  int granularity;
+
+public:
+
+  OmpLoop()
+    :nbthread(1), granularity(1)
+  {}
+  
+  void setNbThread(int t) {
+    nbthread = t;
+  }
+
+  void setGranularity(int g) {
+    granularity = g;
+  }
+
+
+  void parfor (size_t beg, size_t end, size_t increment,
+               std::function<void(int)> f
+               ) {
+#pragma omp parallel num_threads(nbthread)
+    {
+#pragma omp for schedule(dynamic, granularity) 
+      for (size_t i=beg; i<end; i+= increment) {
+	f(i);
+      }
+    }
+  }
+
+  
+  template<typename TLS>
+  void parfor (size_t beg, size_t end, size_t increment,
+               std::function<void(TLS&)> before,
+               std::function<void(int, TLS&)> f,
+               std::function<void(TLS&)> after
+               ) {
+#pragma omp parallel num_threads(nbthread)
+    {
+      TLS tls;
+      before(tls);
+      
+#pragma omp for schedule(dynamic, granularity) 
+      for (size_t i=beg; i<end; i+= increment) {
+	f(i, tls);
+      }
+#pragma omp critical
+      after(tls);
+    }
+  }
+
+};
+
+#endif
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/mergesort/test.sh
+================================================================================
+#!/bin/bash
+
+# does not account for neg numbers
+sci_notation_regex='^[0-9]+([.][0-9]+)?(e[0-9]+|e-[0-9]+)?$'
+h=`hostname`
+
+function test_time {
+    # compare 
+    if [[ ! $1 =~ $sci_notation_regex ]] ; 
+    then
+        echo ERROR: time is not on stderr or not formatted properly
+        echo
+        rm .time
+        exit 1
+    fi
+    # delete tmp file 
+    rm .time
+}
+
+if [ "$h" = "gal-i1.uncc.edu"  ];
+then
+  SUCCESS_FILE=.passed_merge
+else 
+  SUCCESS_FILE=.passed_on_local
+fi
+
+
+
+
+# remove success file
+if [ -e ${SUCCESS_FILE} ] ; 
+then
+    rm ${SUCCESS_FILE} 
+fi
+
+for n in 7 10 1000 1111 1017 10000 10017;
+do 
+    for nbt in 1 2 3 4;
+    do
+        TEST=$(./mergesort $n $nbt 2> .time)
+        if [ "$TEST" = "checked" ] ; 
+        then
+            test_time $(cat .time)
+        else
+            echo FAIL: "./mergesort $n $nbt is not sorted correctly"
+            exit 1
+        fi
+    done
+done
+
+
+touch ${SUCCESS_FILE} 
+
+echo "================================"
+echo
+echo "Success! All MERGESORT tests passed! :)"
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/mergesort/Makefile
+================================================================================
+CFLAGS=-O3 -std=c11 -fPIC -g 
+CXXFLAGS=-O3 -std=c++17 -fPIC -g -fopenmp -pthread
+ARCHIVES=../libgen.a
+LD=g++
+LDFLAGS=-pthread -fopenmp
+
+all: mergesort 
+
+
+mergesort: mergesort.o
+	$(LD) $(LDFLAGS) mergesort.o $(ARCHIVES) -o mergesort
+
+test: mergesort
+	./test.sh
+
+bench: mergesort
+	./queue.sh
+
+plot:  
+	./plot.sh
+
+clean:
+	-rm *.o
+	-rm mergesort
+
+distclean:
+	rm *.out
+
+
+.PHONY:  mergesort
+
+
+/home/data/akhalegh/utils/parallel-computing/mergesort_with_loops/mergesort/queue.sh
+================================================================================
+#!/bin/bash
+
+if [ ! -e .passed_merge ] ;
+then
+    echo "Must pass \`make test\` before queueing jobs"
+    exit 1
+fi
+
+
+#running=$(qstat -u ${USER} | egrep "bench_mergesort.*[R|Q]")
+#if [ -n "${running}" ] ;
+#then
+#    echo "------------------------------------"
+#    echo ${USER} has this job in the queue or running 
+#    qstat | grep ${USER}
+#    echo
+#    echo please delete this job or wait for it to complete
+#    exit 1
+#fi
+
+sbatch --partition=Centaurus --chdir=`pwd` --time=02:00:00 --ntasks=1 --cpus-per-task=16 --mem=40G --job-name=mod4pms bench_mergesort.sh
+
+
+echo "----------------------"
+echo
+echo "Once the job COMPLETES, plot with \`make plot\`"
+
+
