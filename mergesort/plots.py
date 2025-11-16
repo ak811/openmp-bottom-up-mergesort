@@ -3,7 +3,7 @@
 Create a PDF for the mergesort_with_loops assignment containing only:
  - Plots: generated if missing, then embedded
 
-Output: mergesort/submission_mergesort.pdf
+Output: mergesort/plots.pdf
 """
 
 from pathlib import Path
@@ -18,7 +18,7 @@ SEQ_DIR = ROOT / "sequential" / "result"
 PAR_DIR = MS_DIR / "result"
 PLOTS_DIR = MS_DIR / "plots"
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
-SUBMISSION_PDF = MS_DIR / "submission_mergesort.pdf"
+SUBMISSION_PDF = MS_DIR / "plots.pdf"
 
 # --------------- plotting helpers ---------------
 def build_plots_if_needed():
