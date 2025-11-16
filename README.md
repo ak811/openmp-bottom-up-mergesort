@@ -1,11 +1,11 @@
-# Parallel Merge Sort: Parallelization Study
+# Merge Sort: Parallelization Study
 
 This project implements and analyzes a **parallel bottom up mergesort** using OpenMP.
 
 Goals:
 
-- Implement a **sequential baseline** for mergesort.
-- Implement a **parallel iterative mergesort** that uses the `OmpLoop` helper.
+- Implement a sequential baseline for mergesort.
+- Implement a parallel iterative mergesort that uses the `OmpLoop` helper.
 - Measure speedup for different input sizes and thread counts.
 - Visualize results using the plots in `mergesort/plots/`.
 
@@ -66,6 +66,10 @@ mergesort-parallelization-study/
     │   ├── mergesort_speedup_thread.pdf
     │   ├── mergesort_time_vs_threads.pdf
     │   ├── mergesort_efficiency_vs_threads.pdf
+    │   ├── mergesort_speedup_n.png
+    │   ├── mergesort_speedup_thread.png
+    │   ├── mergesort_time_vs_threads.png
+    │   ├── mergesort_efficiency_vs_threads.png
     │   └── mergesort_speedup_table.csv
     │
     └── submission_mergesort.pdf           compact PDF with plots only
@@ -98,7 +102,7 @@ These control the problem sizes and thread counts used by the benchmark scripts.
 
 ## Building and Running
 
-### 1. Build the shared data library (optional but recommended)
+### 1. Build the shared data library
 
 From the project root:
 
@@ -106,7 +110,7 @@ From the project root:
 make libgen.a
 ```
 
-Sub makefiles will auto build `libgen.a` if it is missing, but running it once at the top level is convenient.
+Sub makefiles will auto build `libgen.a` if it is missing.
 
 ---
 
@@ -124,7 +128,7 @@ This writes one timing file per problem size:
 sequential/result/mergesort_seq_<N>
 ```
 
-Each file contains the runtime in seconds on standard error, captured into a file.
+Each file contains the runtime in seconds.
 
 Example from this project:
 
@@ -151,7 +155,7 @@ This produces files of the form:
 mergesort/result/mergesort_<N>_<T>
 ```
 
-Example lines from this project:
+Example:
 
 ```text
 mergesort_100000000_1   -> 11.2595
@@ -180,7 +184,7 @@ This creates PDF plots:
 
 ### Option B: Python plotting path
 
-If `gnuplot` is not available, `make plot` falls back to the Python script:
+If `gnuplot` is not available, `make plot` falls back to:
 
 ```bash
 python3 plot_py.py
@@ -192,14 +196,14 @@ This produces:
 - `plots/mergesort_speedup_thread.pdf` and `.png`
 - `plots/mergesort_speedup_table.csv`
 
-For a richer set of plots and a combined submission PDF, run:
+For the full plot set and a combined submission PDF, run:
 
 ```bash
 cd mergesort
 python3 plots.py
 ```
 
-This ensures PNG images exist and then writes:
+This writes:
 
 - `plots/mergesort_speedup_n.{pdf,png}`
 - `plots/mergesort_speedup_thread.{pdf,png}`
@@ -209,13 +213,15 @@ This ensures PNG images exist and then writes:
 
 ---
 
-## Plots in `mergesort/plots`
+## Plots (included directly in this README)
 
-After running `plot_py.py` or `plots.py`, you can view the plots directly in the repo.
+Once you have run `plot_py.py` or `plots.py`, the following images will render directly in this README.
 
-### 1. Speedup vs threads
+### 1. Speedup vs threads for each N
 
 File: `mergesort/plots/mergesort_speedup_n.png`
+
+![Speedup vs Threads](mergesort/plots/mergesort_speedup_n.png)
 
 This plot shows, for each fixed `N`, the speedup
 
@@ -225,15 +231,15 @@ This plot shows, for each fixed `N`, the speedup
 
 as a function of thread count `T`.
 
-Small `N` has limited speedup, while large `N` shows better scaling.
-
 ---
 
-### 2. Speedup vs problem size
+### 2. Speedup vs problem size for each thread count
 
 File: `mergesort/plots/mergesort_speedup_thread.png`
 
-This plot shows, for each fixed thread count `T`, how speedup changes as `N` grows. The x axis is logarithmic. As `N` increases, parallel overhead is amortized and speedup improves until memory bandwidth becomes the limiting factor.
+![Speedup vs Problem Size](mergesort/plots/mergesort_speedup_thread.png)
+
+This plot shows, for each fixed thread count `T`, how the speedup changes as `N` grows. The x axis is logarithmic.
 
 ---
 
@@ -241,7 +247,9 @@ This plot shows, for each fixed thread count `T`, how speedup changes as `N` gro
 
 File: `mergesort/plots/mergesort_time_vs_threads.png`
 
-This plot shows the parallel runtime for each `N` as a function of thread count. It helps visualize where adding more threads continues to reduce time, and where additional threads no longer help much.
+![Parallel Time vs Threads](mergesort/plots/mergesort_time_vs_threads.png)
+
+This plot shows the absolute parallel runtime as a function of thread count for each `N`.
 
 ---
 
@@ -249,13 +257,15 @@ This plot shows the parallel runtime for each `N` as a function of thread count.
 
 File: `mergesort/plots/mergesort_efficiency_vs_threads.png`
 
+![Parallel Efficiency vs Threads](mergesort/plots/mergesort_efficiency_vs_threads.png)
+
 Parallel efficiency is defined as:
 
 \[
 	ext{efficiency}(N,T) = rac{	ext{speedup}(N,T)}{T}
 \]
 
-This indicates how effectively the algorithm uses additional threads. Efficiency is highest for moderate thread counts and drops significantly at very large thread counts where memory bandwidth dominates.
+This plot shows how effectively additional threads are used for different `N`.
 
 ---
 
@@ -263,45 +273,38 @@ This indicates how effectively the algorithm uses additional threads. Efficiency
 
 The parallel mergesort in `mergesort.cpp` is iterative and uses two buffers `src` and `dst`.
 
-1. **Bottom up passes**
+1. Bottom up passes
 
-   For `width` equal to 1, 2, 4, 8, and so on:
+   For `width` in `1, 2, 4, 8, ...`:
 
-   - Consider blocks of size `2 * width` in `src`.
-   - Treat the left half and right half as sorted runs.
+   - Process blocks of size `2 * width` in `src`.
+   - Treat the left and right halves as sorted runs.
    - Merge them into `dst`.
-   - After each pass, swap `src` and `dst`.
+   - Swap `src` and `dst` after each pass.
 
-2. **Early passes: serial**
+2. Early passes: serial
 
-   For very small run widths, merging is done serially. The variable `SERIAL_PASS_THRESHOLD` controls when to stop doing fully serial passes. At small widths, the work per merge is tiny and parallel overhead is not worth it.
+   When `width` is smaller than `SERIAL_PASS_THRESHOLD`, merging is done serially. This avoids OpenMP overhead when the runs are tiny.
 
-3. **Middle passes: parallel across merges**
+3. Middle passes: parallel across merges
 
-   When there are many independent merges in a pass, the code parallelizes across them. It computes:
+   For passes with many independent merges, the implementation parallelizes across merges:
 
-   - `merges_this_pass` which is roughly `ceil(n / (2 * width))`
-   - A `group` size that coarsens several merges into one parallel iteration.
-   - An outer increment `outer_inc` equal to `step * group` where `step = 2 * width`.
+   - Compute `merges_this_pass`.
+   - Choose a `group` size to coarsen several merges into one iteration.
+   - Use `OmpLoop::parfor` to process groups in parallel.
 
-   `OmpLoop::parfor` is then used to process groups of merges in parallel. This keeps the number of OpenMP iterations manageable and reduces scheduling overhead.
+4. Late passes: parallel inside a merge
 
-4. **Late passes: parallel inside each merge**
+   When there are only a few large merges, the code parallelizes within each merge using `merge_runs_parallel` and `mergepath_partition`:
 
-   If there are only a few large merges in a pass, parallelizing across merges is not enough to keep all threads busy. In that case, the code uses `merge_runs_parallel`, which performs a merge path style partition of the merge output range.
+   - View the merge of arrays `A` and `B` as an output range of length `lenOut`.
+   - For each output index `K`, find `(ia, ib)` such that `ia + ib = K` and that prefix condition holds.
+   - Split the output range into tiles. Each tile computes its local `(ia, ib)` boundaries and merges its portion independently.
 
-   Idea:
+5. OmpLoop abstraction
 
-   - Suppose we merge two sorted arrays `A` and `B` into an output of length `lenOut`.
-   - For an output index `K` in `[0, lenOut)`, there is a unique pair `(ia, ib)` such that `ia + ib = K` and the elements before those positions in `A` and `B` are less than or equal to the element at output index `K`.
-   - `mergepath_partition` finds this pair using a binary search.
-   - The output interval is split into tiles, and each tile is merged independently by a chunk of threads.
-
-   This allows many threads to work inside a single large merge.
-
-5. **OmpLoop abstraction**
-
-   `omploop.hpp` wraps OpenMP into a simple interface:
+   `omploop.hpp` wraps the OpenMP parallel for into a simple interface:
 
    ```cpp
    OmpLoop loop;
@@ -309,23 +312,21 @@ The parallel mergesort in `mergesort.cpp` is iterative and uses two buffers `src
    loop.setGranularity(1);
 
    loop.parfor(beg, end, increment, [&](int i) {
-       // do work at i
+       // work at i
    });
    ```
-
-   Internally it uses a `#pragma omp parallel` region with a `#pragma omp for` loop and dynamic scheduling.
 
 ---
 
 ## Speedup Results: Sequential vs Parallel
 
-The combined timing and speedup data are stored in:
+The numeric data behind the plots is in:
 
 ```text
 mergesort/plots/mergesort_speedup_table.csv
 ```
 
-Each row contains:
+Columns:
 
 - `N` (problem size)
 - `threads`
@@ -334,7 +335,7 @@ Each row contains:
 - `speedup = seq_time / par_time`
 - `efficiency = speedup / threads`
 
-From the current data, the best observed speedup for each problem size is:
+From the provided data, the best observed speedup per `N` is:
 
 | N             | Threads with best speedup | Best speedup (approximate) |
 |--------------:|--------------------------:|----------------------------:|
@@ -343,56 +344,13 @@ From the current data, the best observed speedup for each problem size is:
 | 100,000,000   | 64                        | 2.85 x                      |
 | 1,000,000,000 | 64                        | 3.96 x                      |
 
-### Interpretation by problem size
+### Interpretation
 
-**N = 10,000**
+- For very small `N`, overhead dominates and speedups are modest, sometimes worse than sequential at high thread counts.
+- For moderate `N`, speedup around 2 x is possible with 4 to 16 threads.
+- For large and very large `N`, speedups approach about 3 to 4 x with 64 threads. Scaling is sub linear because mergesort is memory bandwidth bound. Each pass streams two input arrays and one output array, and DRAM bandwidth becomes the main bottleneck.
 
-- Best configuration: 4 threads, speedup about 1.4 x.
-- At 16 and 64 threads, the parallel code becomes slower than sequential.
-- Reason: overhead from thread management and scheduling is large relative to the amount of work. This is a classic case where parallelization does not pay off for very small problems.
-
-**N = 1,000,000**
-
-- Best configuration: 16 threads, speedup about 2.05 x.
-- 4 threads also help (around 1.79 x).
-- 64 threads are slightly worse than 16 threads.
-- Here there is enough work to benefit from parallelism, but the algorithm is still limited by overhead and memory effects when thread count becomes very large.
-
-**N = 100,000,000**
-
-- Best configuration: 64 threads, speedup about 2.85 x.
-- 4 and 16 threads give speedups about 2.17 x and 2.74 x.
-- Mergesort becomes strongly memory bound at this scale. Each pass reads two arrays and writes one array, which pushes memory bandwidth. Adding more threads contends on memory and scaling becomes sub linear.
-
-**N = 1,000,000,000**
-
-- Best configuration: 64 threads, speedup about 3.96 x.
-- 4 threads: about 2.76 x speedup.
-- 16 threads: about 3.65 x speedup.
-- This is the largest problem size in the study. There is enough work to amortize overhead, and the parallel algorithm delivers a noticeable speedup. However, even with 64 threads the speedup stays below 4 x, which clearly shows that memory bandwidth and non parallelizable work cap the scaling.
-
-### Parallel efficiency
-
-Efficiency is speedup divided by thread count.
-
-Example values:
-
-- `N = 1,000,000`, `T = 4`  
-  speedup about 1.79 x  
-  efficiency about 0.45
-
-- `N = 1,000,000,000`, `T = 4`  
-  speedup about 2.76 x  
-  efficiency about 0.69
-
-- `N = 1,000,000,000`, `T = 64`  
-  speedup about 3.96 x  
-  efficiency about 0.06
-
-This shows:
-
-- A small number of threads can be used quite efficiently.
-- Beyond a certain number of threads, additional cores do not translate into proportional speedup due to bandwidth and overhead.
+Parallel efficiency shows that small numbers of threads are used more efficiently. At very high thread counts, efficiency is low because the algorithm cannot make full use of all cores when limited by memory bandwidth and non parallelizable work.
 
 ---
 
